@@ -1,6 +1,6 @@
 # Tetris - DYOA Advanced at TU Graz WS 2020
-# Name:       YOUR_NAME
-# Student ID: YOUR_STUDENT_ID
+# Name:       Felix Holz
+# Student ID: 12027232
 
 import pygame, sys, time, random
 from pygame.locals import *
