@@ -12,7 +12,6 @@ class Block:
     blocknames = ['clevelandZ', 'rhodeIslandZ', 'blueRicky', 'smashBoy', 'orangeRicky', 'teewee', 'hero']
 
     def __init__(self, game, block_name):
-        # Randomize rotation
         self.game = game
         self.name = block_name
         self.possible_rotations = len(game.block_list[block_name])
@@ -27,17 +26,17 @@ class Block:
         self.width = len(shape[0])
         self.height = len(shape)
 
+    # rotate the block to the right
     def right_rotation(self, rotation_options):
         if self.possible_rotations == 1: return;
-        # rotate block once clockwise
         self.rotation = (self.rotation + 1) % (self.possible_rotations)
         self.set_shape(self.game.block_list[self.name][self.rotation])
         if not self.game.is_block_on_valid_position(self):
             self.left_rotation(0)
 
+    # rotate the block to the right
     def left_rotation(self, rotation_options):
         if self.possible_rotations == 1: return;
-        # rotate block once counter-clockwise
         self.rotation = (self.rotation - 1)
         if self.rotation == -1:
             self.rotation = self.possible_rotations - 1
@@ -46,11 +45,20 @@ class Block:
         if not self.game.is_block_on_valid_position(self):
             self.right_rotation(0)
 
+
 class Game(BaseGame):
     def __init__(self):
         super(Game, self).__init__()
+        self.score_dictionary = {
+            0: 0,
+            1: 40,
+            2: 100,
+            3: 300,
+            4: 1200
+        }
         self.base_speed = self.speed
         self.level = 0
+        self.paused = False
 
     def run_game(self):
         print("run_game")
@@ -60,14 +68,6 @@ class Game(BaseGame):
 
         current_block = self.get_new_block()
         next_block = self.get_new_block()
-
-        self.score_dictionary = {
-            0: 0,
-            1: 40,
-            2: 100,
-            3: 300,
-            4: 1200
-        }
 
         # GameLoop
         while True:
@@ -92,32 +92,35 @@ class Game(BaseGame):
                     if event.key == pygame.K_p:
                         self.paused = not self.paused
                     if event.key == pygame.K_DOWN:
+                        if self.paused: continue
                         while self.gametick(current_block):
                             pass
 
-
             if self.paused:
-                self.show_text("Paused")
-                self.paused = False  # because show_text blocks until key pressed
+                self.show_text("Paused")  # blocks until any key is pressed
+                self.paused = False
 
             if not self.gametick(current_block):
                 self.add_block_to_board(current_block)
+                nr_rows_removed = self.remove_complete_line()
+                self.calculate_new_level(self.score)
+
                 current_block = next_block
                 next_block = self.get_new_block()
 
             if self.is_block_colliding_with_board(current_block):
                 self.show_text("Game Over")
-                sys.exit()  # because show_text blocks until any key is pressed
+                sys.exit()  # blocks until any key is pressed
 
             self.speed = self.base_speed + self.level
 
-            # Draw after game logic
+            # Draw
             self.display.fill(self.background)
             self.draw_game_board()
             self.draw_score()
             self.draw_level()
             self.draw_next_block(next_block)
-            if current_block != None:
+            if current_block is not None:
                 self.draw_block(current_block)
             pygame.display.update()
             self.set_game_speed(self.speed)
@@ -125,7 +128,7 @@ class Game(BaseGame):
 
     # moves the block by one,
     # returns true if everything went well
-    # returns false if block is stuck
+    # returns false if block is stuck (on other block or floor)
     def gametick(self, current_block):
         good_position = True
         if self.is_block_on_valid_position(current_block, 0, 1):
@@ -137,13 +140,13 @@ class Game(BaseGame):
 
     # Check if Coordinate given is on board (returns True/False)
     def is_coordinate_on_board(self, x, y):
-        # check if coordinate is on playingboard (in boundary of self.boardWidth and self.boardHeight)
         if x < 0 or x > (self.board_width-1):
             return False
         if y < 0 or y > (self.board_height-1):
             return False
         return True
 
+    # Check if the block is colliding with the existing board
     def is_block_colliding_with_board(self, block):
         valid_position = False
         for i in range(0, block.height):
@@ -172,8 +175,8 @@ class Game(BaseGame):
     # Returns True if the line is complete
     def check_line_complete(self, y_coord):
         row = self.gameboard[y_coord]
-
         complete = True
+
         for item in row:
             if item is self.blank_color:
                 complete = False
@@ -188,16 +191,13 @@ class Game(BaseGame):
 
         for i in range(0, self.board_height):
             if self.check_line_complete(i):
-                # self.gameboard.pop(i)
-
                 for j in range(i, 0, -1):
                     self.gameboard[j] = self.gameboard[j-1]
 
                 self.gameboard[0] = ([self.blank_color] * self.board_width)
-
                 nr_rows_removed += 1
 
-        self.calculate_new_score(nr_rows_removed, self.level)
+        self.calculate_new_score(nr_rows_removed, self.level)  # not optimal? but test cases require this
         return nr_rows_removed
 
     # Create a new random block
@@ -207,6 +207,7 @@ class Game(BaseGame):
         block = Block(self, blockname)
         return block
 
+    # fixes the block "block" to the board
     def add_block_to_board(self, block):
         for i in range(0, block.height):
             for j in range(0, block.width):
@@ -215,38 +216,24 @@ class Game(BaseGame):
                     _y = block.x + j
                     self.gameboard[_x][_y] = block.color
 
-        self.remove_complete_line()
-
     # calculate new Score after a line has been removed
     def calculate_new_score(self, lines_removed, level):
         new_points = self.score_dictionary[lines_removed]
         new_points *= (level + 1)
         self.score += new_points
-        #print("Score: " + str(self.score))
-        self.calculate_new_level(self.score)
-        # TODO Maybe call calculate_new_level?
-        # Points per lines removed corresponds to the score_directory
-        # Points gained: Points per line removed at once times the level modifier!
-        # The level
-        # modifier is 1 higher than the current level.
 
     # calculate new Level after the score has changed
     def calculate_new_level(self, score):
-        # The level generally corresponds to the score divided by 300 points.
-        # 300 -> level 1; 600 -> level 2; 900 -> level 3
-        # TODO increase gamespeed by 1 on level up only
         self.level = math.floor(score / 300)
 
     # set the current game speed
     def set_game_speed(self, speed):
         self.speed = speed
-        # set the correct game speed!
-        # It starts as defined in base.py and should increase by 1 after a level up.
 
 
-#-------------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------------
 # Do not modify the code below, your implementation should be done above
-#-------------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------------
 def main():
     pygame.init()
     game = Game()
